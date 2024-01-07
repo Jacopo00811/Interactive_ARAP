@@ -18,7 +18,7 @@ cmake ..
 ```
 
 ## Building and running
-If using Visual Studio, open the `Interactive_ARAP.sln` and right click on the app project and select `Set as Startup Project`. Then build and run the project.
+If using Visual Studio, open the `Interactive_ARAP.sln` and right click on the `app` project and select `Set as Startup Project`. Then build and run the project.
 
 Otherwise if using Linux for example, use the following commands
 ```shell
