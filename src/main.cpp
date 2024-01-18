@@ -1,7 +1,11 @@
+#include <iostream>
 #include <igl/opengl/glfw/Viewer.h>
+#include "sample.h"
 
 int main(int argc, char* argv[])
 {
+
+    testIfWorks();
     // Inline mesh of a cube
     const Eigen::MatrixXd V = (Eigen::MatrixXd(8, 3) <<
         0.0, 0.0, 0.0,
