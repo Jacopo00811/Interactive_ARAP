@@ -31,12 +31,28 @@ Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F
 	igl::adjacency_list(F, neighbors);
 	// For vertex i, neighbors[i] contains the indices of all the vertices that are connected to vertex i
 	for (unsigned int i = 0; i < vertices; i++) {
+		
+		// Find all row indices (faces) that contain the target value i (vertex i)
+			// Step 1: Create a binary matrix indicating where the target value i is present
+			// and find all row indices (faces) that contain the target value i (vertex i)
+		Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> mask = (F.array() == i);
+
+		std::vector<Eigen::Vector3i> faces_with_vertex_i;
+    
+		for (int k = 0; k < mask.rows(); ++k) {
+			// Check if the row has at least one occurrence of the target value i
+			if (mask.row(k).any()) {
+				// Add the row
+				faces_with_vertex_i.push_back(F.row(k));
+			}
+		}
+
 		for (unsigned int j : neighbors[i]) {
 			
 			double w_ij = 0;
 			
 			if (W.coeff(j, i) == 0)
-				w_ij = compute_cotangent_weight_for_pair(i, j, V, F);
+				w_ij = compute_cotangent_weight_for_pair(i, j, faces_with_vertex_i, V, F);
 			else
 				w_ij = W.coeff(j, i);
 
@@ -48,19 +64,10 @@ Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F
 	return W;
 }
 
-double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j, const Eigen::MatrixXd& V, const Eigen::MatrixXi& F) {
+double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j, const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V, const Eigen::MatrixXi& F) {
 	// To store the faces that contain the vertex i 
 	std::vector<Eigen::Vector3i> possible_faces;
 
-	// Find all row indices (faces) that contain the target value i (vertex i)
-	std::vector<Eigen::Vector3i> faces_with_vertex_i;
-
-	for (unsigned int k = 0; k < F.rows(); ++k) {
-		for (unsigned int l = 0; l < F.cols(); ++l) {
-			if (F.coeff(k, l) == i)
-				faces_with_vertex_i.push_back(F.row(k));
-		}
-	}  
 	// Find all possible faces that contain both vertex i and vertex j
 	for (Eigen::Vector3i face : faces_with_vertex_i) { 
 		if (is_part_of_face(i, j, face))
