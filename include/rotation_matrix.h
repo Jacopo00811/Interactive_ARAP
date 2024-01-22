@@ -27,3 +27,6 @@ std::vector<Eigen::Matrix<double, 3, -1>> compute_const_part_covariance(const Ei
  * @return vector of matricies of R
  */
 std::vector<Eigen::Matrix3d> rotation_matrix(const std::vector<Eigen::Matrix<double, 3, -1>>& PD, const Eigen::MatrixXi& F, Eigen::MatrixXd& U);
+
+extern std::vector<Eigen::Matrix<double, 3, -1>> P_prime; // declare P_prime an external variable to be able to use it in one_iteration.cpp
+extern std::vector<Eigen::Matrix3d> R (numVertex); 

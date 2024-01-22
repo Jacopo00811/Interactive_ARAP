@@ -2,6 +2,7 @@
 #include <igl/opengl/glfw/Viewer.h>
 #include "cotangent_weight_matrix.h"
 #include "rotation_matrix.h"
+#include "one_iteration.h"
 
 int main(int argc, char* argv[])
 {
