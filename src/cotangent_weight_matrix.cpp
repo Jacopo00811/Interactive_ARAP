@@ -86,8 +86,11 @@ double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j, const s
 		int vertex_id = get_third_face_vertex(i, j, face);
 		Eigen::Vector3d v_o = V.row(vertex_id);
 		double angle = cotangent(v_i - v_o, v_j - v_o);
+		// Clip negative values of weights to zero
+		if (angle < 1e-8)
+			angle = 0;
 		cotangent_sum += angle;
 	}
-	// Divide by two (1/2*abs((cot(alpha)+cot(betha)))
-	return abs(cotangent_sum)/2.0f;
+	// Divide by two (1/2*(cot(alpha)+cot(betha))
+	return cotangent_sum/2.0f;
 }
