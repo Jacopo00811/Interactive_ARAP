@@ -2,6 +2,7 @@
 #include <igl/opengl/glfw/Viewer.h>
 #include "cotangent_weight_matrix.h"
 #include "rotation_matrix.h"
+#include "system_matrix.h"
 
 int main(int argc, char* argv[])
 {
@@ -59,7 +60,7 @@ int main(int argc, char* argv[])
     viewer.data().set_face_based(true);
     viewer.launch();
     */
-
+    
     auto PD = compute_const_part_covariance(V, F);
     std::cout << std::endl << std::endl << std::endl;
     std::cout << "PD (weights * e_ij): " << std::endl;
@@ -75,4 +76,9 @@ int main(int argc, char* argv[])
     for (const auto& matrix : R) {
         std::cout << "Matrix: " << std::endl << matrix << std::endl << std::endl;
     }
+    
+
+    auto W = weight_matrix(V, F);
+    auto L = initialize_system_matrix(V, F, W);
+    std::cout << "Matrix L: " << std::endl << L << std::endl;
 }
