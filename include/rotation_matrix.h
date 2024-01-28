@@ -14,16 +14,15 @@ cotangent weight matrix.
 /**
  * Computes the constant part (P*D) of the covariance matrix S given:
  * @param V matrix where each row represents a vertex coordinates in 3D space
- * @param F matrix where each row represents the three vertices that compose a face f (triangle)
+ * @param W matrix of weights for the entire mesh (1s in the main diagonal)
  * @return vector of matricies of PD
  */
-std::vector<Eigen::Matrix<double, 3, -1>> compute_const_part_covariance(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
+std::vector<Eigen::Matrix<double, 3, -1>> compute_const_part_covariance(const Eigen::MatrixXd& V, const Eigen::MatrixXd& W, const std::vector<std::vector<unsigned int>>& neighbors);
 
 /**
  * Computes a vector of rotation matricies R given:
  * @param PD constant part of the covariance matrix S
- * @param F matrix where each row represents the three vertices that compose a face f (triangle)
- * @param U matrix where each row represents a vertex coordinates in 3D space after it has been moved
+ * @param OUT matrix where each row represents a vertex coordinates in 3D space after it has been moved
  * @return vector of matricies of R
  */
-std::vector<Eigen::Matrix3d> rotation_matrix(const std::vector<Eigen::Matrix<double, 3, -1>>& PD, const Eigen::MatrixXi& F, Eigen::MatrixXd& U);
+std::vector<Eigen::Matrix3d> rotation_matrix(const std::vector<Eigen::Matrix<double, 3, -1>>& PD, const Eigen::MatrixXd& OUT, const std::vector<std::vector<unsigned int>>& neighbors);

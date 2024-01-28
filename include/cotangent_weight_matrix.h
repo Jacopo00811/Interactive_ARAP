@@ -38,14 +38,13 @@ int get_third_face_vertex(unsigned int i, unsigned int j, Eigen::Vector3i face);
  * @param F matrix where each row represents the three vertices that compose a face f (triangle)
  * @return W matrix of weights for the entire mesh (1s in the main diagonal)  
  */
-Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
+Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, const std::vector<std::vector<unsigned int>>& neighbors);
 
 /**
  * Helper function, computes the cotanget weight for a pair of indices
  * @param i first index
  * @param j first index
  * @param V matrix where each row represents a vertex coordinates in 3D space
- * @param F matrix where each row represents the three vertices that compose a face f (triangle)
  * @return weight_ij 
  */
-double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j,const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
+double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j,const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V);

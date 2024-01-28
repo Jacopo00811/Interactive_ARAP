@@ -19,16 +19,13 @@ int get_third_face_vertex(unsigned int i, unsigned int j, Eigen::Vector3i face) 
 	return -1;
 }
 
-Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F) {
+Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, const std::vector<std::vector<unsigned int>>& neighbors) {
 	// Amount of vertices
 	unsigned int vertices = V.rows();
 	
 	// Create the weight matrix
 	Eigen::MatrixXd W = Eigen::MatrixXd::Zero(vertices, vertices);
-	
-	// Find the neighbors of each vertex
-	std::vector<std::vector<unsigned int>> neighbors(vertices);
-	igl::adjacency_list(F, neighbors);
+
 	// For vertex i, neighbors[i] contains the indices of all the vertices that are connected to vertex i
 	for (unsigned int i = 0; i < vertices; i++) {
 		
@@ -52,7 +49,7 @@ Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F
 			double w_ij = 0;
 			
 			if (W.coeff(j, i) == 0)
-				w_ij = compute_cotangent_weight_for_pair(i, j, faces_with_vertex_i, V, F);
+				w_ij = compute_cotangent_weight_for_pair(i, j, faces_with_vertex_i, V);
 			else
 				w_ij = W.coeff(j, i);
 
@@ -64,7 +61,7 @@ Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F
 	return W;
 }
 
-double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j, const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V, const Eigen::MatrixXi& F) {
+double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j, const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V) {
 	// To store the faces that contain the vertex i 
 	std::vector<Eigen::Vector3i> possible_faces;
 
