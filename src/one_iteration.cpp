@@ -5,7 +5,7 @@
 #include <igl/adjacency_list.h>      //igl library which constructs the graph adjacency list of a given mesh (v,f)
 									 //returns a list containing at index 'i' the adjacent vertices (neighbors) of vertex 'i'
 
-std::Eigen::MatrixXd one_iteration(
+Eigen::MatrixXd one_iteration(
   const Eigen::MatrixXd& constr_vertices,
   const Eigen::VectorXi& constr_indices,
   const Eigen::MatrixXd& W,
