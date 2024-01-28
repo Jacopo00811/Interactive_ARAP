@@ -76,4 +76,13 @@ int main(int argc, char* argv[])
     for (const auto& matrix : R) {
         std::cout << "Matrix: " << std::endl << matrix << std::endl << std::endl;
     }
+
+    /*
+    auto U = one_iteration(constr_vertices, constr_indices, W, R, V, F, U, systemMatrix_init);
+    std::cout << std::endl << std::endl << std::endl;
+    std::cout << "Updated vertex positions after one iteration" << std::endl;
+    for (const auto& matrix : R) {
+    std::cout << "Matrix: " << std::endl << matrix << std::endl << std::endl;
+    }
+    */
 }

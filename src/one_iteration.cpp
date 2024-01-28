@@ -5,15 +5,17 @@
 #include <igl/adjacency_list.h>      //igl library which constructs the graph adjacency list of a given mesh (v,f)
 									 //returns a list containing at index 'i' the adjacent vertices (neighbors) of vertex 'i'
 
-void one_iteration(
+std::Eigen::MatrixXd one_iteration(
   const Eigen::MatrixXd& constr_vertices,
   const Eigen::VectorXi& constr_indices,
+  const Eigen::MatrixXd& W,
+  const std::vector<Eigen::Matrix3d>& R,
   const Eigen::MatrixXd& P,
   const Eigen::MatrixXi& F,
   Eigen::MatrixXd& P_prime, 							
   Eigen::SparseMatrix<double>& systemMatrix_init)
 {
-	unsigned int numVertex = P_prime.rows();               //no. of vertices
+	unsigned int numVertex = P.rows();                     //no. of vertices
 	unsigned int numFaces  = F.rows();                     //no. of faces
     std::vector<std::vector<double>> neighbors(numVertex); //defines a vector of neighbors for one vertex
     igl::adjacency_list(F, neighbors); 					   //populate the 'neighbors' vector with the neighbors of each vertex 'i'
@@ -100,5 +102,7 @@ void one_iteration(
         //for each vertex 'i', set the new position in the matrix 'P_prime' (which contains all deformed vertices).
 		//the x, y, and z components of the new position are taken from the solutions obtained in the linear system solving step (x(i), y(i), z(i)).
     }
+
+    return P_prime;
 
 }

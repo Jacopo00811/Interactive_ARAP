@@ -48,4 +48,4 @@ Eigen::MatrixXd weight_matrix(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F
  * @param F matrix where each row represents the three vertices that compose a face f (triangle)
  * @return weight_ij 
  */
-double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j,const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);
+double compute_cotangent_weight_for_pair(unsigned int i, unsigned int j,const std::vector<Eigen::Vector3i>& faces_with_vertex_i, const Eigen::MatrixXd& V, const Eigen::MatrixXi& F);z
