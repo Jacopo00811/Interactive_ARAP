@@ -14,27 +14,21 @@
  *                                  Control points are specific vertices in the mesh that are constrained to certain positions. 
  * @param constr_indices      = A vector containing the indices of the control points in the vertex matrix 'V' (indices of constraint vertices)
  * 
- * @param V                   = Matrix containing all vertices in the initial position
+ * @param P                   = Matrix containing all vertices in the initial position
  * @param F                   = Matrix containin all the faces of the mesh
- * @param U                   = Matrix containing all deformed vertices (the positions of the vertices after deformation). 
+ * @param P_prime             = Matrix containing all deformed vertices (the positions of the vertices after deformation). 
  *                              This matrix will be updated by the function.
  * 
  * @param systemMatrix_init   = A sparse matrix representing the system matrix for global optimization. 
  *                              It represents the linear system of equations to be solved during the deformation process.
  *                              This matrix will be updated by the function.
  * 
- * @param unif_weight_use = A flag indicating whether uniform weights should be used.
- * @param unif_weight_val     = Value of the uniform weight
- * (The ARAP algorithm allows for both uniform and non-uniform weighting of the energy terms.) 
  */
 
 void one_iteration(
   const std::vector<Eigen::Matrix<double,3,-1>>& K,
   const Eigen::MatrixXd& constr_vertices,
-  const Eigen::VectorXi& constr_indices,
-  const Eigen::MatrixXd& V,
+  const Eigen::VectorXi& constr_indices,P,
   const Eigen::MatrixXi& F,
-  Eigen::MatrixXd& U,
-  Eigen::SparseMatrix<double>& systemMatrix_init,
-  bool unif_weight_use,
-  double unif_weight_val);
+  Eigen::MatrixXd& P_prime,
+  Eigen::SparseMatrix<double>& systemMatrix_init);
