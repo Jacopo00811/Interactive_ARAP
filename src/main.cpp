@@ -27,7 +27,7 @@ enum MouseButton {
 int main()
 {
 
-	 const std::string pathToMeshes = "../Meshes/";
+	const std::string pathToMeshes = "../Meshes/";
     const std::string bunnyMesh = pathToMeshes + "bunny.off";
     const std::string armadilloMesh = pathToMeshes + "armadillo.off";
     const std::string exMesh = pathToMeshes + "ex.off";
@@ -48,15 +48,10 @@ int main()
     int currentHandle;
     std::set<int> fixedPoints; // better to be kept as indices rather than concrete points
 
-    Eigen::MatrixXd U(V.rows(), V.cols());
-
     // Find the neighbors of each vertex
-    std::vector<std::vector<unsigned int>> neighbors(vertices);
     std::vector<Eigen::Matrix<double, 3, -1>> PD;
     Eigen::MatrixXd W;
     Eigen::MatrixXd L_initial;
-
-
 
     while (true)
     {
@@ -85,6 +80,25 @@ int main()
     igl::readOFF(mesh, V, F);
 
 
+    unsigned int vertices = V.rows();
+    std::vector<std::vector<unsigned int>> neighbors(vertices);
+    // Compute the neighbors list
+    igl::adjacency_list(F, neighbors);
+    
+    // Initialize matrix U
+    Eigen::MatrixXd U(V.rows(), V.cols());
+
+    // Compute the weight matrix for the mesh
+    W = weight_matrix(V, F, neighbors);
+    // Compute the constant part 
+    PD = compute_const_part_covariance(V, W, neighbors);
+    // Save the original system matrix
+    L_initial = initialize_system_matrix(V, W, neighbors);
+
+    viewer.data().set_mesh(V, F);
+    viewer.core().align_camera_center(V, F);
+    viewer.data().set_face_based(true);
+    viewer.launch();
 
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer &viewer, int button, int) -> bool
@@ -157,12 +171,12 @@ int main()
             // 1st:
             //  Calculate the vector R of rotation matrices
             //  U is the OUT matrix of the previous iteration
-            auto R = rotation_matrix(PD, U, neighbors);
+            std::vector<Eigen::Matrix3d> R { rotation_matrix(PD, U, neighbors) };
 
             // Note: we need to make an initial guess for U at the first step! See paper to understand why?
             // 2nd:
             // U is the matrix of the new vertices after one ARAP iteration, called OUT or U above
-            auto res = ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial);
+            Eigen::MatrixXd out { ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial) };
 
             // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified
             // (constraints addition or removal), but the L_initial will stay the same during the process
@@ -174,8 +188,8 @@ int main()
             viewer.data().clear_points();
 
             // TODO draw the new mesh
-            viewer.data().set_mesh(U, F);
-            viewer.core().align_camera_center(U, F);
+            viewer.data().set_mesh(out, F);
+            viewer.core().align_camera_center(out, F);
 
             // draw the fixed points
             for (int pointIndex : fixedPoints)
@@ -221,21 +235,5 @@ int main()
         return true;
     };
 
-
-
-    unsigned int vertices = V.rows();
-
-    igl::adjacency_list(F, neighbors);
-
-    auto W = weight_matrix(V, F, neighbors);
-
-    auto PD = compute_const_part_covariance(V, W, neighbors);
-
-    // Save the original system matrix
-    auto L_initial = initialize_system_matrix(V, W, neighbors);
-
-    viewer.data().set_mesh(V, F);
-    viewer.core().align_camera_center(V, F);
-    viewer.data().set_face_based(true);
-    viewer.launch();
+    return 0;
 }
