@@ -1,144 +1,241 @@
 #include <iostream>
+#include <string>
+#include <set>
+#include <vector>
+#include <igl/readOFF.h>
 #include <igl/opengl/glfw/Viewer.h>
-#include "cotangent_weight_matrix.h"
+#include <igl/unproject_onto_mesh.h>
+#include <igl/unproject.h>
 #include "rotation_matrix.h"
+#include "cotangent_weight_matrix.h"
 #include "system_matrix.h"
 #include "ARAP_iteration.h"
 
-int main(int argc, char* argv[])
+enum Mode {
+	ROTATION,
+	POINT_SELECTION,
+	HANDLE_SELECTION
+};
+
+// similar to the code in https://libigl.github.io/dox/Viewer_8h_source.html
+enum MouseButton {
+	LEFT_BUTTON,
+	MIDDLE_BUTTON,
+	RIGHT_BUTTON
+};
+
+int main()
 {
-    const Eigen::MatrixXd V{
-    {1.0, 0.0, 2.0},
-    {2.0, 0.0, 2.0},
-    {2.0, 2.0, 2.0},
-    {2.0, -3.0, 2.0},
-    {4.0, 0.0, 2.0}
-    };
 
-    const Eigen::MatrixXd U{
-    {2.0, 0.0, 2.0},
-    {10.0, 0.0, 2.0},
-    {9.0, 6.0, 8.0},
-    {7.0, -3.0, 3.0},
-    {2.0, 0.0, 1.0}
-    };
+	 const std::string pathToMeshes = "../Meshes/";
+    const std::string bunnyMesh = pathToMeshes + "bunny.off";
+    const std::string armadilloMesh = pathToMeshes + "armadillo.off";
+    const std::string exMesh = pathToMeshes + "ex.off";
 
-    const Eigen::MatrixXi F{
-            {0, 1, 2},
-            {0, 1, 3},
-            {1, 2, 4},
-            {1, 3, 4},
-    };
+    std::string meshChoice;
+    std::string mesh;
 
-    const Eigen::MatrixXd constraint_vertices{
-    {6.4, 2.1, 3.1},
-    {1.0, 2.0, 3.0},
-    };
+    Mode mode = Mode::ROTATION;
 
-    // Create a vector of indices in this weird way    
-    const Eigen::VectorXi constraint_indices = [] {
-        Eigen::VectorXi indices(3);
-        indices << 1, 3, 4;
-        indices << 0, 1, 2;
-        return indices;
-        }();
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+    Eigen::RowVector3d handleColor(0, 255, 0);
+    Eigen::RowVector3d pointColor(0, 0, 255);
 
-    /*
-    // Inline mesh of a cube
-    const Eigen::MatrixXd V = (Eigen::MatrixXd(8, 3) <<
-        0.0, 0.0, 0.0,
-        0.0, 0.0, 1.0,
-        0.0, 1.0, 0.0,
-        0.0, 1.0, 1.0,
-        1.0, 0.0, 0.0,
-        1.0, 0.0, 1.0,
-        1.0, 1.0, 0.0,
-        1.0, 1.0, 1.0).finished();
-    const Eigen::MatrixXi F = (Eigen::MatrixXi(12, 3) <<
-        0, 6, 4,
-        0, 2, 6,
-        0, 3, 2,
-        0, 1, 3,
-        2, 7, 6,
-        2, 3, 7,
-        4, 6, 7,
-        4, 7, 5,
-        0, 4, 5,
-        0, 5, 1,
-        1, 5, 7,
-        1, 7, 3).finished();
-    
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_face_based(true);
-    viewer.launch();
-    */
 
+    int currentHandle;
+    std::set<int> fixedPoints; // better to be kept as indices rather than concrete points
 
+    Eigen::MatrixXd U(V.rows(), V.cols());
 
-    // Amount of vertices
-    unsigned int vertices = V.rows();
     // Find the neighbors of each vertex
     std::vector<std::vector<unsigned int>> neighbors(vertices);
+    std::vector<Eigen::Matrix<double, 3, -1>> PD;
+    Eigen::MatrixXd W;
+    Eigen::MatrixXd L_initial;
+
+
+
+    while (true)
+    {
+        std::cout << "Please choose a mesh:\n1 - Stanford Bunny\n2 - Armadillo\n";
+        std::cin >> meshChoice;
+        if (meshChoice == "1")
+        {
+            mesh = bunnyMesh;
+            break;
+        }
+        else if (meshChoice == "2")
+        {
+            mesh = armadilloMesh;
+            break;
+        }
+        else if (meshChoice == "3")
+        {
+            mesh = exMesh;
+            break;
+        }
+        else
+        {
+            std::cout << "The choice is invalid.\n";
+        }
+    }
+    igl::readOFF(mesh, V, F);
+
+
+
+
+    viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer &viewer, int button, int) -> bool
+    {
+        // Some of the code in this function is taken from the official libigl tutorial at https://github.com/libigl/libigl/blob/main/tutorial/708_Picking/main.cpp
+        // the face id of the face that was clicked on
+        int fid;
+        // the barycentric coordinates of the face being clicked on
+        Eigen::Vector3f bc;
+
+        double x = viewer.current_mouse_x;
+        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+        if (igl::unproject_onto_mesh(Eigen::Vector2f(x, y), viewer.core().view,
+                                     viewer.core().proj, viewer.core().viewport, V, F, fid, bc))
+        {
+
+            Eigen::Vector3i selectedFace = F.row(fid);
+            // maxCoeff will give the point index whose barycentric coordinate is the greatest meaning that is the closest one to the actual point that was clicked
+            // Eigen::Vector3f point = V(selectedFace(bc.maxCoeff()));
+            int closestPointIndex;
+            bc.maxCoeff(&closestPointIndex);
+            int pointIndex = selectedFace(closestPointIndex);
+
+            bool remove = (button == RIGHT_BUTTON);
+
+            if (mode == HANDLE_SELECTION)
+            {
+                currentHandle = pointIndex;
+                viewer.data().add_points(V.row(pointIndex), handleColor);
+            }
+            else if (mode == POINT_SELECTION)
+            {
+                if (remove)
+                {
+                    fixedPoints.erase(pointIndex);
+                    viewer.data().clear_points();
+                    for (auto &point : fixedPoints)
+                    {
+                        viewer.data().add_points(V.row(point), pointColor);
+                    }
+                }
+                else
+                {
+                    std::cout << "Inserting a fixed point " << pointIndex << std::endl;
+                    fixedPoints.insert(pointIndex);
+                    viewer.data().add_points(V.row(pointIndex), pointColor);
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    };
+
+    viewer.callback_mouse_up = [&](igl::opengl::glfw::Viewer &viewer, int button, int) -> bool
+    {
+        bool remove = (button == RIGHT_BUTTON);
+
+        if (mode == HANDLE_SELECTION)
+        {
+
+            // TODO invoke arap computation
+            double x = viewer.current_mouse_x;
+            double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+            Eigen::Vector3f projection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
+                                                        viewer.core().proj, viewer.core().viewport);
+            std::cout << "Projection: " << projection(0) << " " << projection(1) << " " << projection(2) << std::endl;
+
+            // 1st:
+            //  Calculate the vector R of rotation matrices
+            //  U is the OUT matrix of the previous iteration
+            auto R = rotation_matrix(PD, U, neighbors);
+
+            // Note: we need to make an initial guess for U at the first step! See paper to understand why?
+            // 2nd:
+            // U is the matrix of the new vertices after one ARAP iteration, called OUT or U above
+            auto res = ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial);
+
+            // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified
+            // (constraints addition or removal), but the L_initial will stay the same during the process
+
+            // Repeat 1 and 2 until satisfaction(Energy difference < epsilo or number of iterations or both)
+
+            // clear the mesh
+            // viewer.data().clear();
+            viewer.data().clear_points();
+
+            // TODO draw the new mesh
+            viewer.data().set_mesh(U, F);
+            viewer.core().align_camera_center(U, F);
+
+            // draw the fixed points
+            for (int pointIndex : fixedPoints)
+            {
+                viewer.data().add_points(V.row(pointIndex), pointColor);
+            }
+
+            // draw the handle point
+            // viewer.data().add_points(V.row(currentHandle), handleColor);
+            std::cout << "Done with arap " << std::endl;
+            return true;
+        }
+        // TODO not needed?
+        else if (mode == POINT_SELECTION)
+        {
+        }
+
+        return false;
+    };
+
+    viewer.callback_key_pressed = [&](igl::opengl::glfw::Viewer &viewer, unsigned char key, int) -> bool
+    {
+        std::cout << "Pressed key " << key << std::endl;
+        switch (key)
+        {
+        case 'H':
+        case 'h':
+            mode = HANDLE_SELECTION;
+            std::cout << "Switching to handle" << std::endl;
+            return true;
+        case 'F':
+        case 'f':
+            mode = POINT_SELECTION;
+            std::cout << "Switching to point" << std::endl;
+            return true;
+        case 'N':
+        case 'n':
+            mode = ROTATION;
+            std::cout << "Switching to rotation" << std::endl;
+            return true;
+        }
+
+        return true;
+    };
+
+
+
+    unsigned int vertices = V.rows();
+
     igl::adjacency_list(F, neighbors);
+
     auto W = weight_matrix(V, F, neighbors);
 
     auto PD = compute_const_part_covariance(V, W, neighbors);
-    std::cout << std::endl << std::endl << std::endl;
-    std::cout << "PD (weights * e_ij): " << std::endl;
-    for (const auto& matrix : PD) {
-    	std::cout << "Matrix: " << std::endl << matrix << std::endl << std::endl;
-    }
 
-    auto R = rotation_matrix(PD, U, neighbors);
-    std::cout << std::endl << std::endl << std::endl;
-    std::cout << "Rotation matricies: " << std::endl;
-    for (const auto& matrix : R) {
-        std::cout << "Matrix: " << std::endl << matrix << std::endl << std::endl;
-    }
-    
-    auto L = initialize_system_matrix(V, W, neighbors);
-    std::cout << std::endl << std:: endl << "Matrix L: " << std::endl << L << std::endl << std::endl;
-    
-    auto res = ARAP_iteration(constraint_vertices, constraint_indices, W, R, V, neighbors, L);
-    std::cout << "Matrix res: " << std::endl << res << std::endl << std::endl;
-    std::cout << "Matrix V: " << std::endl << V << std::endl << std::endl;
-    std::cout << std::endl << std::endl << "Matrix L after: " << std::endl << L << std::endl << std::endl;
+    // Save the original system matrix
+    auto L_initial = initialize_system_matrix(V, W, neighbors);
 
-    /*
-    Steps to perform one ARAP itaration:
-        
-        Initialize:
-            // Amount of vertices
-            unsigned int vertices = V.rows();
-            
-            // Find the neighbors of each vertex
-            std::vector<std::vector<unsigned int>> neighbors(vertices);
-            igl::adjacency_list(F, neighbors);
-            
-            auto W = weight_matrix(V, F, neighbors);
-        
-            auto PD = compute_const_part_covariance(V, W, neighbors);
-
-            // Save the original system matrix
-            auto L_initial = initialize_system_matrix(V, W, neighbors);
-        
-
-        1st:
-            // Calculate the vector R of rotation matrices
-            // U is the OUT matrix of the previous iteration
-            auto R = rotation_matrix(PD, U, neighbors);
-            
-            // Note: we need to make an initial guess for U at the first step! See paper to understand why?
-        2nd:
-            // res is the matrix of the new vertices after one ARAP iteration, called OUT or U above
-            auto res = ARAP_iteration(constraint_vertices, constraint_indices, W, R, V, neighbors, L_initial);
-
-            // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified 
-            // (constraints addition or removal), but the L_initial will stay the same during the process
-
-        Repeat 1 and 2 until satisfaction (Energy difference < epsilo or number of iterations or both)
-    */
-
+    viewer.data().set_mesh(V, F);
+    viewer.core().align_camera_center(V, F);
+    viewer.data().set_face_based(true);
+    viewer.launch();
 }

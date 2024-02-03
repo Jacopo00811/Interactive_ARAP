@@ -1,8 +1,7 @@
 #include "ARAP_iteration.h"
 
 Eigen::MatrixXd ARAP_iteration(
-  const Eigen::MatrixXd& constraint_vertices,
-  const Eigen::VectorXi& constraint_indices,
+  const std::set<int>& constraint_indices,
   const Eigen::MatrixXd& W,
   const std::vector<Eigen::Matrix3d>& R,
   const Eigen::MatrixXd& V,	
@@ -31,6 +30,8 @@ Eigen::MatrixXd ARAP_iteration(
 			// w_ij is associated with the edge between the vertices i and j
             double w_ij = W.coeff(i, j); 
 			// compute the local contribution to the sum (see eq. 8 from the reference article)
+            std::cout << i << " " << j << " " << vertices;
+            std::cout << "second" <<R.size() << " " << V.rows() << " " << vertices;
             sum += w_ij/2.0*(R[i]+R[j])*(V.row(i)-V.row(j)).transpose(); 
         }
 		// the local contributions for all neighboring vertices are accumulated in the sum vector and assigned to the corresponding 
@@ -45,11 +46,11 @@ Eigen::MatrixXd ARAP_iteration(
 	// update the system matrix by zeroing out rows and columns corresponding to the constrained vertices and set the diagonal entry to 1.0
 
     // loop over constraints
-    for (int c = 0; c < constraint_vertices.rows(); c++) {
+    for (const auto& c : constraint_indices) {
 	
         // for each constraint, retrieve the constraint vector and the corresponding index from the respective matrices
-        Eigen::Vector3d constraint = constraint_vertices.row(c);
-        int constraint_index = constraint_indices(c);
+        Eigen::Vector3d constraint = V.row(c);
+        int constraint_index = c;
 
         for (unsigned int i = 0; i < vertices; ++i) {
             //for each vertex i check if the system matrix coefficient at position (i, constraint_index) is not zero
