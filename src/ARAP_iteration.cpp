@@ -53,7 +53,7 @@ Eigen::MatrixXd ARAP_iteration(
         int constraint_index = c;
 
         for (unsigned int i = 0; i < vertices; ++i) {
-            //for each vertex i check if the system matrix coefficient at position (i, constraint_index) is not zero
+            // for each vertex i check if the system matrix coefficient at position (i, constraint_index) is not zero
             if (L.coeff(i, constraint_index) != 0.0) {      
 
 			// adjust the b vectors by subtracting the product of the system matrix coefficient and the corresponding constraint component
