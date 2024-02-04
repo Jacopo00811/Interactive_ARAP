@@ -162,7 +162,7 @@ int main()
         {
             Eigen::MatrixXd res(vertices, 3);
             for (int iteration = 0; iteration < MAX_ITER; iteration++) {
-                if (first) {
+                if (FIRST_LOOP) {
                     U = V;
 
                     // TODO invoke arap computation
@@ -175,8 +175,7 @@ int main()
 
                     U.row(currentHandle) -= projection_double;
 
-                    first = false;
-                    std::cout << "First is now false\n";
+                    FIRST_LOOP = false;
                 }
        
 
