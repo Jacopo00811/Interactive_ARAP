@@ -24,6 +24,8 @@ enum MouseButton {
 	RIGHT_BUTTON
 };
 
+
+
 int main()
 {
 
@@ -34,6 +36,10 @@ int main()
 
     std::string meshChoice;
     std::string mesh;
+    
+    bool FIRST_LOOP = true;
+    int MAX_ITER = 10;
+
 
     Mode mode = Mode::ROTATION;
 
@@ -95,12 +101,6 @@ int main()
     // Save the original system matrix
     L_initial = initialize_system_matrix(V, W, neighbors);
 
-    viewer.data().set_mesh(V, F);
-    viewer.core().align_camera_center(V, F);
-    viewer.data().set_face_based(true);
-    viewer.launch();
-
-
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer &viewer, int button, int) -> bool
     {
         // Some of the code in this function is taken from the official libigl tutorial at https://github.com/libigl/libigl/blob/main/tutorial/708_Picking/main.cpp
@@ -160,53 +160,74 @@ int main()
 
         if (mode == HANDLE_SELECTION)
         {
+            Eigen::MatrixXd res(vertices, 3);
+            for (int iteration = 0; iteration < MAX_ITER; iteration++) {
+                if (first) {
+                    U = V;
 
-            // TODO invoke arap computation
-            double x = viewer.current_mouse_x;
-            double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-            Eigen::Vector3f projection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
-                                                        viewer.core().proj, viewer.core().viewport);
-            std::cout << "Projection: " << projection(0) << " " << projection(1) << " " << projection(2) << std::endl;
+                    // TODO invoke arap computation
+                    double x = viewer.current_mouse_x;
+                    double y = viewer.core().viewport(3) - viewer.current_mouse_y;
+                    Eigen::Vector3f projection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
+                        viewer.core().proj, viewer.core().viewport);
+                    //std::cout << "Projection: " << projection(0) << " " << projection(1) << " " << projection(2) << std::endl;
+                    Eigen::Vector3d projection_double = projection.cast<double>();
 
-            // 1st:
-            //  Calculate the vector R of rotation matrices
-            //  U is the OUT matrix of the previous iteration
-            std::vector<Eigen::Matrix3d> R { rotation_matrix(PD, U, neighbors) };
+                    U.row(currentHandle) -= projection_double;
 
-            // Note: we need to make an initial guess for U at the first step! See paper to understand why?
-            // 2nd:
-            // U is the matrix of the new vertices after one ARAP iteration, called OUT or U above
-            Eigen::MatrixXd out { ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial) };
+                    first = false;
+                    std::cout << "First is now false\n";
+                }
+       
 
-            // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified
-            // (constraints addition or removal), but the L_initial will stay the same during the process
 
-            // Repeat 1 and 2 until satisfaction(Energy difference < epsilo or number of iterations or both)
+                // 1st:
+                //  Calculate the vector R of rotation matrices
+                //  U is the OUT matrix of the previous iteration
+                std::vector<Eigen::Matrix3d> R = rotation_matrix(PD, U, neighbors);
 
-            // clear the mesh
-            // viewer.data().clear();
-            viewer.data().clear_points();
+                // Note: we need to make an initial guess for U at the first step! See paper to understand why?
+                // 2nd:
+                // U is the matrix of the new vertices after one ARAP iteration, called OUT or U above
+                Eigen::MatrixXd U = ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial);
 
-            // TODO draw the new mesh
-            viewer.data().set_mesh(out, F);
-            viewer.core().align_camera_center(out, F);
+                // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified
+                // (constraints addition or removal), but the L_initial will stay the same during the process
 
-            // draw the fixed points
-            for (int pointIndex : fixedPoints)
-            {
-                viewer.data().add_points(V.row(pointIndex), pointColor);
+                // Repeat 1 and 2 until satisfaction(Energy difference < epsilo or number of iterations or both)
+
+                // clear the mesh
+                // viewer.data().clear();
+                //viewer.data().clear_points();
+                // Clear the mesh and draw the new mesh
+                //viewer.data().clear();
+                //viewer.data().set_mesh(U, F);
+                
+                //viewer.core().align_camera_center(U, F);
+                //viewer.data().set_face_based(true);
+
+                // draw the fixed points
+                //for (int pointIndex : fixedPoints)
+                //{
+                //    viewer.data().add_points(V.row(pointIndex), pointColor);
+                //}
+
+                // draw the handle point
+                //viewer.data().add_points(U.row(currentHandle), handleColor);
+                //viewer.core().align_camera_center(U, F);
+                std::cout << "Done with arap: " << iteration << std::endl;
+                if (iteration == MAX_ITER - 1) {
+                    res = U;
+                }
             }
+            viewer.data().clear();
+            viewer.data().clear_points();
+            viewer.data().set_mesh(res, F);
+            viewer.core().align_camera_center(res, F);
+            viewer.data().set_face_based(true);
 
-            // draw the handle point
-            // viewer.data().add_points(V.row(currentHandle), handleColor);
-            std::cout << "Done with arap " << std::endl;
             return true;
         }
-        // TODO not needed?
-        else if (mode == POINT_SELECTION)
-        {
-        }
-
         return false;
     };
 
@@ -231,9 +252,11 @@ int main()
             std::cout << "Switching to rotation" << std::endl;
             return true;
         }
-
         return true;
     };
 
-    return 0;
+    viewer.data().set_mesh(V, F);
+    viewer.core().align_camera_center(V, F);
+    viewer.data().set_face_based(true);
+    viewer.launch();
 }

@@ -30,8 +30,8 @@ Eigen::MatrixXd ARAP_iteration(
 			// w_ij is associated with the edge between the vertices i and j
             double w_ij = W.coeff(i, j); 
 			// compute the local contribution to the sum (see eq. 8 from the reference article)
-            std::cout << i << " " << j << " " << vertices;
-            std::cout << "second" <<R.size() << " " << V.rows() << " " << vertices;
+            //std::cout << i << " " << j << " " << vertices;
+            //std::cout << "second" <<R.size() << " " << V.rows() << " " << vertices;
             sum += w_ij/2.0*(R[i]+R[j])*(V.row(i)-V.row(j)).transpose(); 
         }
 		// the local contributions for all neighboring vertices are accumulated in the sum vector and assigned to the corresponding 
