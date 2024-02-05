@@ -1,3 +1,8 @@
+// Prevent the from printing the default instructions for use
+#ifndef IGL_VIEWER_VIEWER_QUIET
+#define IGL_VIEWER_VIEWER_QUIET
+#endif
+
 #include <iostream>
 #include <string>
 #include <set>
@@ -7,33 +12,37 @@
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/unproject_onto_mesh.h>
 #include <igl/unproject.h>
+#include <igl/project.h>
 #include "rotation_matrix.h"
 #include "cotangent_weight_matrix.h"
 #include "system_matrix.h"
 #include "ARAP_iteration.h"
 #include "main.h"
 
-enum Mode {
-	ROTATION,
-	POINT_SELECTION,
-	HANDLE_SELECTION
+enum Mode
+{
+    ROTATION,
+    POINT_SELECTION,
+    HANDLE_SELECTION
 };
 
 // similar to the code in https://libigl.github.io/dox/Viewer_8h_source.html
-enum MouseButton {
-	LEFT_BUTTON,
-	MIDDLE_BUTTON,
-	RIGHT_BUTTON
+enum MouseButton
+{
+    LEFT_BUTTON,
+    MIDDLE_BUTTON,
+    RIGHT_BUTTON
 };
 
-void updateMesh(igl::opengl::glfw::Viewer& viewer, const Eigen::MatrixXd& U, const Eigen::MatrixXi& F, const std::set<int>& fixedPoints, const Eigen::RowVector3d& pointColor, int currentHandle, const Eigen::RowVector3d& handleColor)
+void updateMesh(igl::opengl::glfw::Viewer &viewer, const Eigen::MatrixXd &U, const Eigen::MatrixXi &F, const std::set<int> &fixedPoints, const Eigen::RowVector3d &pointColor, int currentHandle, const Eigen::RowVector3d &handleColor)
 {
     viewer.data().clear();
     viewer.data().clear_points();
     viewer.data().set_mesh(U, F);
 
     // draw the fixed points
-    for (int pointIndex : fixedPoints) {
+    for (int pointIndex : fixedPoints)
+    {
         viewer.data().add_points(U.row(pointIndex), pointColor);
     }
 
@@ -43,6 +52,37 @@ void updateMesh(igl::opengl::glfw::Viewer& viewer, const Eigen::MatrixXd& U, con
     viewer.data().set_face_based(true);
 }
 
+void extractScreenCoords(igl::opengl::glfw::Viewer viewer, double &x, double &y)
+{
+    x = viewer.current_mouse_x;
+    y = viewer.core().viewport(3) - viewer.current_mouse_y;
+}
+
+Eigen::Vector3d getWorldCoords(igl::opengl::glfw::Viewer viewer)
+{
+    double x, y;
+    extractScreenCoords(viewer, x, y);
+
+    Eigen::Vector3d worldProjection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
+                          viewer.core().proj, viewer.core().viewport)
+        .cast<double>();
+
+    return worldProjection;
+}
+
+Eigen::Vector3d getWorldCoords(igl::opengl::glfw::Viewer viewer, Eigen::Vector3d handle)
+{
+    double x, y;
+    extractScreenCoords(viewer, x, y);
+    Eigen::Vector3f handleFloat = handle.cast<float>();
+    Eigen::Vector3f meshProjection = igl::project(handleFloat, viewer.core().view, viewer.core().proj, viewer.core().viewport);
+
+    Eigen::Vector3d worldProjection = igl::unproject(Eigen::Vector3f(x, y, meshProjection(2)), viewer.core().view,
+                          viewer.core().proj, viewer.core().viewport)
+        .cast<double>();
+
+    return worldProjection;
+}
 
 int main()
 {
@@ -59,18 +99,17 @@ int main()
     bool FIRST_LOOP = true;
     int MAX_ITER = 5;
 
-
     Mode mode = Mode::ROTATION;
 
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::RowVector3d handleColor(0, 255, 0);
     Eigen::RowVector3d pointColor(0, 0, 255);
-  
+
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
 
-    int currentHandle {0};
+    int currentHandle{0};
     std::set<int> fixedPoints; // better to be kept as indices rather than concrete points
     std::string arapChoice;
 
@@ -81,13 +120,13 @@ int main()
 
     const std::string Instructions = R"(
     [left click]                        Place fixed point when in fixed point mode
-    [left click] + [drag]               Place and move handle point when in handle point mode
-    [left click] (not on mesh)          Rotation
+    [left click] + [drag]               Place and move handle point when in handle mode , or rotate when in rotation mode
+    [right click]                       Delete a point
     H,h                                 Enter handle point mode
     F,f                                 Enter fixed point mode
     N,n                                 Enter rotation mode (default at the start)
     )";
-    
+
     // Print our instructions to the console
     std::cout << Instructions << std::endl;
 
@@ -145,59 +184,63 @@ int main()
     Eigen::MatrixXd U(V.rows(), V.cols());
     // Compute the weight matrix for the mesh
     W = weight_matrix(V, F, neighbors);
-    // Compute the constant part 
+    // Compute the constant part
     PD = compute_const_part_covariance(V, W, neighbors);
     // Save the original system matrix
     L_initial = initialize_system_matrix(V, W, neighbors);
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer &viewer, int button, int) -> bool
     {
-        // Some of the code in this function is taken from the official libigl tutorial at https://github.com/libigl/libigl/blob/main/tutorial/708_Picking/main.cpp
-        // the face id of the face that was clicked on
-        int fid;
-        // the barycentric coordinates of the face being clicked on
-        Eigen::Vector3f bc;
-
-        double x = viewer.current_mouse_x;
-        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-        if (igl::unproject_onto_mesh(Eigen::Vector2f(x, y), viewer.core().view,
-                                     viewer.core().proj, viewer.core().viewport, V, F, fid, bc))
+        if (mode != ROTATION)
         {
+            // Some of the code in this function is taken from the official libigl tutorial at https://github.com/libigl/libigl/blob/main/tutorial/708_Picking/main.cpp
+            // the face id of the face that was clicked on
+            int fid;
+            // the barycentric coordinates of the face being clicked on
+            Eigen::Vector3f bc;
 
-            Eigen::Vector3i selectedFace = F.row(fid);
-            // maxCoeff will give the point index whose barycentric coordinate is the greatest meaning that is the closest one to the actual point that was clicked
-            // Eigen::Vector3f point = V(selectedFace(bc.maxCoeff()));
-            int closestPointIndex;
-            bc.maxCoeff(&closestPointIndex);
-            int pointIndex = selectedFace(closestPointIndex);
+            double x, y;
+            extractScreenCoords(viewer, x, y);
 
-            bool remove = (button == RIGHT_BUTTON);
-
-            if (mode == HANDLE_SELECTION)
+            if (igl::unproject_onto_mesh(Eigen::Vector2f(x, y), viewer.core().view,
+                                         viewer.core().proj, viewer.core().viewport, V, F, fid, bc))
             {
-                currentHandle = pointIndex;
-                viewer.data().add_points(V.row(pointIndex), handleColor);
-            }
-            else if (mode == POINT_SELECTION)
-            {
-                if (remove)
+
+                Eigen::Vector3i selectedFace = F.row(fid);
+                // maxCoeff will give the point index whose barycentric coordinate is the greatest meaning that is the closest one to the actual point that was clicked
+                // Eigen::Vector3f point = V(selectedFace(bc.maxCoeff()));
+                int closestPointIndex;
+                bc.maxCoeff(&closestPointIndex);
+                int pointIndex = selectedFace(closestPointIndex);
+
+                bool remove = (button == RIGHT_BUTTON);
+
+                if (mode == HANDLE_SELECTION)
                 {
-                    fixedPoints.erase(pointIndex);
-                    viewer.data().clear_points();
-                    for (auto &point : fixedPoints)
+                    currentHandle = pointIndex;
+                    viewer.data().add_points(V.row(pointIndex), handleColor);
+                }
+                else if (mode == POINT_SELECTION)
+                {
+                    if (remove)
                     {
-                        viewer.data().add_points(V.row(point), pointColor);
+                        fixedPoints.erase(pointIndex);
+                        viewer.data().clear_points();
+                        for (auto &point : fixedPoints)
+                        {
+                            viewer.data().add_points(V.row(point), pointColor);
+                        }
+                    }
+                    else
+                    {
+                        std::cout << "Inserting a fixed point: " << pointIndex << "  At coordinate: " << V.row(pointIndex) << std::endl;
+                        fixedPoints.insert(pointIndex);
+                        viewer.data().add_points(V.row(pointIndex), pointColor);
                     }
                 }
-                else
-                {
-                    std::cout << "Inserting a fixed point: " << pointIndex << "  At coordinate: " << V.row(pointIndex) << std::endl;
-                    fixedPoints.insert(pointIndex);
-                    viewer.data().add_points(V.row(pointIndex), pointColor);
-                }
-            }
 
-            return true;
+                return true;
+            }
         }
 
         return false;
@@ -207,7 +250,7 @@ int main()
     {
         bool remove = (button == RIGHT_BUTTON);
 
-        if (mode == HANDLE_SELECTION)
+        if (mode == HANDLE_SELECTION && currentHandle != -1)
         {
             if (useIglArap)
             {
@@ -218,49 +261,47 @@ int main()
 
                 // Convert the set<int> to a vector a Eigen::VectorXi of positions
                 Eigen::VectorXi fixedPointsEigen = Eigen::Map<Eigen::VectorXi>(std::vector<int>(fixedPoints.begin(), fixedPoints.end()).data(), fixedPoints.size());
-                
+
                 // Add the handle
-                fixedPointsEigen.conservativeResize(fixedPointsEigen.size()+1);
-                fixedPointsEigen(fixedPointsEigen.size()-1) = currentHandle;
+                fixedPointsEigen.conservativeResize(fixedPointsEigen.size() + 1);
+                fixedPointsEigen(fixedPointsEigen.size() - 1) = currentHandle;
 
                 // Create the matrix of fixed points, (.size() is also counting the handle now)
                 Eigen::MatrixXd FixedPointsMatrix(fixedPointsEigen.size(), V.cols());
                 // Populate the matrix
-                for (unsigned int i = 0; i < fixedPointsEigen.size()-1; ++i) {
+                for (unsigned int i = 0; i < fixedPointsEigen.size() - 1; ++i)
+                {
                     FixedPointsMatrix.row(i) = V.row(fixedPointsEigen[i]);
                 }
                 // Add the handle
-                FixedPointsMatrix.row(FixedPointsMatrix.rows()-1) = V.row(currentHandle);
+                FixedPointsMatrix.row(FixedPointsMatrix.rows() - 1) = V.row(currentHandle);
 
                 // Update the position of the current handle based on the mouse position
-                double x = viewer.current_mouse_x;
-                double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-                Eigen::Vector3d projection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
-                    viewer.core().proj, viewer.core().viewport).cast<double>();
-                FixedPointsMatrix.row(FixedPointsMatrix.rows()-1) -= projection;
+
+                Eigen::Vector3d projection = getWorldCoords(viewer, V.row(currentHandle));
+                FixedPointsMatrix.row(FixedPointsMatrix.rows() - 1) = projection;
 
                 // Precomputation
                 igl::arap_precomputation(V, F, V.cols(), fixedPointsEigen, arap_data);
 
                 // Solve
                 igl::arap_solve(FixedPointsMatrix, arap_data, U);
-                
-                updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
 
+                updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
+                currentHandle = -1;
                 return true;
             }
             else
             {
-                for (int iteration = 0; iteration < MAX_ITER; iteration++) {
-                    if (FIRST_LOOP) {
+                for (int iteration = 0; iteration < MAX_ITER; iteration++)
+                {
+                    if (FIRST_LOOP)
+                    {
                         U = V;
 
-                        double x = viewer.current_mouse_x;
-                        double y = viewer.core().viewport(3) - viewer.current_mouse_y;
-                        Eigen::Vector3d projection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
-                            viewer.core().proj, viewer.core().viewport).cast<double>();
-                  
-                        U.row(currentHandle) -= projection;
+                        Eigen::Vector3d projection = getWorldCoords(viewer, V.row(currentHandle));
+
+                        U.row(currentHandle) = projection;
 
                         FIRST_LOOP = false;
                     }
@@ -279,9 +320,10 @@ int main()
                     // Repeat 1 and 2 until satisfaction(Energy difference < epsilon or number of iterations or both)
                 }
                 updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
-
+                currentHandle = -1;
+                FIRST_LOOP = true;
                 return true;
-            }  
+            }
         }
         return false;
     };
