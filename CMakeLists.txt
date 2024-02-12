@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -fsanitize=address")
 
 # Executables
-LIST(APPEND HEADER_FILES "include/cotangent_weight_matrix.h" "include/rotation_matrix.h" "include/system_matrix.h" "include/ARAP_iteration.h")
+LIST(APPEND HEADER_FILES "include/main.h" "include/cotangent_weight_matrix.h" "include/rotation_matrix.h" "include/system_matrix.h" "include/ARAP_iteration.h")
 LIST(APPEND SOURCE_FILES "src/main.cpp" "src/cotangent_weight_matrix.cpp" "src/rotation_matrix.cpp" "src/system_matrix.cpp" "src/ARAP_iteration.cpp")
 
 set(Eigen3_DIR ${LIBRARY_DIR}/Eigen/share/eigen3/cmake CACHE PATH "Path to installed Eigen")

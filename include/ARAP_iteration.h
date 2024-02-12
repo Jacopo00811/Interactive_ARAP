@@ -3,10 +3,12 @@
 #include <Eigen/Core>
 #include <vector>
 #include <igl/adjacency_list.h>
+#include <set>
+#include <iostream>
+
 
  /**
   * Performs a single iteration of the ARAP algorithm.
-  * @param constraint_vertices matrix containing the vertices that make up the constraints of the problem
   * @param constraint_indices vector of indices for the vertices that make up the contraints of the problem
   * @param W matrix of weights for the entire mesh (1s in the main diagonal)  
   * @param R vector of rotation matricies for every vertex i
@@ -15,8 +17,7 @@
   * @return OUT matrix where each row represents a vertex coordinates in 3D space after it has been moved
   */
 Eigen::MatrixXd ARAP_iteration(
-    const Eigen::MatrixXd& constraint_vertices,
-    const Eigen::VectorXi& constraint_indices,
+    const std::set<int>& constraint_indices,
     const Eigen::MatrixXd& W,
     const std::vector<Eigen::Matrix3d>& R,
     const Eigen::MatrixXd& V,
