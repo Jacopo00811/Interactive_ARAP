@@ -4,9 +4,11 @@
 #endif
 
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <set>
 #include <vector>
+#include <chrono>
 #include <igl/readOFF.h>
 #include <igl/arap.h>
 #include <igl/opengl/glfw/Viewer.h>
@@ -18,21 +20,6 @@
 #include "system_matrix.h"
 #include "ARAP_iteration.h"
 #include "main.h"
-
-enum Mode
-{
-    ROTATION,
-    POINT_SELECTION,
-    HANDLE_SELECTION
-};
-
-// similar to the code in https://libigl.github.io/dox/Viewer_8h_source.html
-enum MouseButton
-{
-    LEFT_BUTTON,
-    MIDDLE_BUTTON,
-    RIGHT_BUTTON
-};
 
 void updateMesh(igl::opengl::glfw::Viewer &viewer, const Eigen::MatrixXd &U, const Eigen::MatrixXi &F, const std::set<int> &fixedPoints, const Eigen::RowVector3d &pointColor, int currentHandle, const Eigen::RowVector3d &handleColor)
 {
@@ -64,8 +51,8 @@ Eigen::Vector3d getWorldCoords(igl::opengl::glfw::Viewer viewer)
     extractScreenCoords(viewer, x, y);
 
     Eigen::Vector3d worldProjection = igl::unproject(Eigen::Vector3f(x, y, 0), viewer.core().view,
-                          viewer.core().proj, viewer.core().viewport)
-        .cast<double>();
+                                                     viewer.core().proj, viewer.core().viewport)
+                                          .cast<double>();
 
     return worldProjection;
 }
@@ -78,54 +65,185 @@ Eigen::Vector3d getWorldCoords(igl::opengl::glfw::Viewer viewer, Eigen::Vector3d
     Eigen::Vector3f meshProjection = igl::project(handleFloat, viewer.core().view, viewer.core().proj, viewer.core().viewport);
 
     Eigen::Vector3d worldProjection = igl::unproject(Eigen::Vector3f(x, y, meshProjection(2)), viewer.core().view,
-                          viewer.core().proj, viewer.core().viewport)
-        .cast<double>();
+                                                     viewer.core().proj, viewer.core().viewport)
+                                          .cast<double>();
+
+    // std::cout << "world " << worldProjection.x() << " " << worldProjection.y() << " " << worldProjection.z() << std::endl;
 
     return worldProjection;
 }
 
+void saveFixedPoints(const std::set<int> &fixedPoints, const std::string &mesh)
+{
+    std::fstream file("../fixedPoints.txt", std::fstream::out | std::fstream::trunc);
+
+    std::cout << "Saving points" << std::endl;
+    for (int point : fixedPoints)
+    {
+        file << point << std::endl;
+        // std::cout << point << std::endl;
+    }
+
+    file.close();
+}
+
+void loadFixedPoints(std::set<int> &fixedPoints)
+{
+    std::fstream file("../fixedPoints.txt", std::fstream::in);
+
+    std::string point;
+    std::cout << "Loading points" << std::endl;
+
+    while (std::getline(file, point))
+    {
+        fixedPoints.insert(std::stoi(point, nullptr));
+        // std::cout << point << std::endl;
+    }
+    file.close();
+}
+
+void ourImplArap(Eigen::Vector3d projection)
+{
+    bool FIRST_LOOP = true;
+    for (int iteration = 0; iteration < MAX_ITER; iteration++)
+    {
+        if (FIRST_LOOP)
+        {
+            U = V;
+
+            U.row(currentHandle) = projection;
+
+            FIRST_LOOP = false;
+        }
+        // 1st:
+        //  Calculate the vector R of rotation matrices
+        //  U is the OUT matrix of the previous iteration
+        std::vector<Eigen::Matrix3d> R = rotation_matrix(PD, U, neighbors);
+
+        // Note: we need to make an initial guess for U at the first step! See paper to understand why?
+        // 2nd:
+        // U is the matrix of the new vertices after one ARAP iteration, called OUT or U above
+        U = ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial);
+        std::cout << "Done with arap: " << iteration << std::endl;
+        // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified
+        // (constraints addition or removal), but the L_initial will stay the same during the process
+        // Repeat 1 and 2 until satisfaction(Energy difference < epsilon or number of iterations or both)
+    }
+
+    FIRST_LOOP = true;
+}
+
+void libiglImplArap(Eigen::Vector3d projection, igl::ARAPEnergyType energy = igl::ARAP_ENERGY_TYPE_SPOKES)
+{
+    // Use the ARAP implementation from the igl library
+    igl::ARAPData arap_data;
+    arap_data.max_iter = MAX_ITER;
+    arap_data.with_dynamics = true;
+    arap_data.energy = energy;
+    // arap_data.energy = igl::ARAP_ENERGY_TYPE_SPOKES;
+    // arap_data.energy = igl::ARAP_ENERGY_TYPE_SPOKES_AND_RIMS;
+    // arap_data.energy = igl::ARAP_ENERGY_TYPE_ELEMENTS;
+
+    // Convert the set<int> to a vector a Eigen::VectorXi of positions
+    Eigen::VectorXi fixedPointsEigen = Eigen::Map<Eigen::VectorXi>(std::vector<int>(fixedPoints.begin(), fixedPoints.end()).data(), fixedPoints.size());
+
+    // Add the handle
+    fixedPointsEigen.conservativeResize(fixedPointsEigen.size() + 1);
+    fixedPointsEigen(fixedPointsEigen.size() - 1) = currentHandle;
+
+    // Create the matrix of fixed points, (.size() is also counting the handle now)
+    Eigen::MatrixXd FixedPointsMatrix(fixedPointsEigen.size(), V.cols());
+    // Populate the matrix
+    for (unsigned int i = 0; i < fixedPointsEigen.size() - 1; ++i)
+    {
+        FixedPointsMatrix.row(i) = V.row(fixedPointsEigen[i]);
+    }
+    // Add the handle
+    FixedPointsMatrix.row(FixedPointsMatrix.rows() - 1) = V.row(currentHandle);
+
+    FixedPointsMatrix.row(FixedPointsMatrix.rows() - 1) = projection;
+
+    // Precomputation
+    igl::arap_precomputation(V, F, V.cols(), fixedPointsEigen, arap_data);
+
+    // Solve
+    igl::arap_solve(FixedPointsMatrix, arap_data, U);
+}
+
+double calculateEnergy()
+{
+    double energy = 0;
+    int vertices = V.rows();
+    std::vector<Eigen::Matrix3d> R = rotation_matrix(PD, U, neighbors);
+    for (int i = 0; i < vertices; i++)
+    {
+        for (int j = 0; j < neighbors[i].size(); j++)
+        {
+            energy += W(i, j) * ((U.row(i) - U.row(j)).transpose() - R[i] * (V.row(i) - V.row(j)).transpose()).norm();
+        }
+    }
+
+    return energy;
+}
+
+void testLibiglArap(Eigen::Vector3d proj, igl::ARAPEnergyType energy)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    std::cout << "MAX iteration " << MAX_ITER << " with energy " << energy << std::endl;
+    libiglImplArap(proj, energy);
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::cout << "It took " << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() / 1000000.0 << " seconds." << std::endl;
+    std::cout << "The calculated energy is " << calculateEnergy() << std::endl;
+}
+
+void testOurArap(Eigen::Vector3d proj)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    std::cout << "MAX iteration " << MAX_ITER << std::endl;
+    ourImplArap(proj);
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::cout << "It took " << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() / 1000000.0 << " seconds." << std::endl;
+    std::cout << "The calculated energy is " << calculateEnergy() << std::endl;
+}
+
+void runTests()
+{
+    currentHandle = 850;
+    Eigen::Vector3d proj(0.792619, 0.0459771, -0.222237);
+    useIglArap = true;
+    std::cout << "Running with libigl's implementation:\n";
+    igl::readOFF(mesh, V, F);
+    loadFixedPoints(fixedPoints);
+    MAX_ITER = 1;
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES_AND_RIMS);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_ELEMENTS);
+    MAX_ITER = 5;
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES_AND_RIMS);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_ELEMENTS);
+    MAX_ITER = 10;
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES_AND_RIMS);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_ELEMENTS);
+    MAX_ITER = 20;
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_SPOKES_AND_RIMS);
+    testLibiglArap(proj, igl::ARAP_ENERGY_TYPE_ELEMENTS);
+
+    std::cout << "\n\n\nRunning with our implementation:\n";
+    MAX_ITER = 1;
+    testOurArap(proj);
+    MAX_ITER = 5;
+    testOurArap(proj);
+    MAX_ITER = 10;
+    testOurArap(proj);
+    MAX_ITER = 20;
+    testOurArap(proj);
+}
+
 int main()
 {
-    bool useIglArap;
-
-    const std::string pathToMeshes = "../Meshes/";
-    const std::string bunnyMesh = pathToMeshes + "bunny.off";
-    const std::string armadilloMesh = pathToMeshes + "armadillo.off";
-    const std::string exMesh = pathToMeshes + "ex.off";
-
-    std::string meshChoice;
-    std::string mesh;
-
-    bool FIRST_LOOP = true;
-    int MAX_ITER = 5;
-
-    Mode mode = Mode::ROTATION;
-
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-    Eigen::RowVector3d handleColor(0, 255, 0);
-    Eigen::RowVector3d pointColor(0, 0, 255);
-
-    // Plot the mesh
-    igl::opengl::glfw::Viewer viewer;
-
-    int currentHandle{0};
-    std::set<int> fixedPoints; // better to be kept as indices rather than concrete points
-    std::string arapChoice;
-
-    // Find the neighbors of each vertex
-    std::vector<Eigen::Matrix<double, 3, -1>> PD;
-    Eigen::MatrixXd W;
-    Eigen::MatrixXd L_initial;
-
-    const std::string Instructions = R"(
-    [left click]                        Place fixed point when in fixed point mode
-    [left click] + [drag]               Place and move handle point when in handle mode , or rotate when in rotation mode
-    [right click]                       Delete a point
-    H,h                                 Enter handle point mode
-    F,f                                 Enter fixed point mode
-    N,n                                 Enter rotation mode (default at the start)
-    )";
 
     // Print our instructions to the console
     std::cout << Instructions << std::endl;
@@ -156,9 +274,22 @@ int main()
     }
     igl::readOFF(mesh, V, F);
 
+    unsigned int vertices = V.rows();
+    neighbors = std::vector<std::vector<unsigned int>>(vertices);
+    // Compute the neighbors list
+    igl::adjacency_list(F, neighbors);
+    // Initialize matrix U
+    U = Eigen::MatrixXd(V.rows(), V.cols());
+    // Compute the weight matrix for the mesh
+    W = weight_matrix(V, F, neighbors);
+    // Compute the constant part
+    PD = compute_const_part_covariance(V, W, neighbors);
+    // Save the original system matrix
+    L_initial = initialize_system_matrix(V, W, neighbors);
+
     while (true)
     {
-        std::cout << "Please choose an ARAP implementation:\n1 - Our implementation\n2 - igl library implementation\n";
+        std::cout << "Please choose an ARAP implementation:\n1 - Our implementation\n2 - igl library implementation\n3 - Run tests\n";
         std::cin >> arapChoice;
         if (arapChoice == "1")
         {
@@ -170,24 +301,16 @@ int main()
             useIglArap = true;
             break;
         }
+        else if (arapChoice == "3")
+        {
+            runTests();
+            return 0;
+        }
         else
         {
             std::cout << "The choice is invalid.\n";
         }
     }
-
-    unsigned int vertices = V.rows();
-    std::vector<std::vector<unsigned int>> neighbors(vertices);
-    // Compute the neighbors list
-    igl::adjacency_list(F, neighbors);
-    // Initialize matrix U
-    Eigen::MatrixXd U(V.rows(), V.cols());
-    // Compute the weight matrix for the mesh
-    W = weight_matrix(V, F, neighbors);
-    // Compute the constant part
-    PD = compute_const_part_covariance(V, W, neighbors);
-    // Save the original system matrix
-    L_initial = initialize_system_matrix(V, W, neighbors);
 
     viewer.callback_mouse_down = [&](igl::opengl::glfw::Viewer &viewer, int button, int) -> bool
     {
@@ -252,78 +375,21 @@ int main()
 
         if (mode == HANDLE_SELECTION && currentHandle != -1)
         {
+            Eigen::Vector3d projection = getWorldCoords(viewer, V.row(currentHandle));
             if (useIglArap)
             {
-                // Use the ARAP implementation from the igl library
-                igl::ARAPData arap_data;
-                arap_data.max_iter = MAX_ITER;
-                arap_data.with_dynamics = true;
-
-                // Convert the set<int> to a vector a Eigen::VectorXi of positions
-                Eigen::VectorXi fixedPointsEigen = Eigen::Map<Eigen::VectorXi>(std::vector<int>(fixedPoints.begin(), fixedPoints.end()).data(), fixedPoints.size());
-
-                // Add the handle
-                fixedPointsEigen.conservativeResize(fixedPointsEigen.size() + 1);
-                fixedPointsEigen(fixedPointsEigen.size() - 1) = currentHandle;
-
-                // Create the matrix of fixed points, (.size() is also counting the handle now)
-                Eigen::MatrixXd FixedPointsMatrix(fixedPointsEigen.size(), V.cols());
-                // Populate the matrix
-                for (unsigned int i = 0; i < fixedPointsEigen.size() - 1; ++i)
-                {
-                    FixedPointsMatrix.row(i) = V.row(fixedPointsEigen[i]);
-                }
-                // Add the handle
-                FixedPointsMatrix.row(FixedPointsMatrix.rows() - 1) = V.row(currentHandle);
-
-                // Update the position of the current handle based on the mouse position
-
-                Eigen::Vector3d projection = getWorldCoords(viewer, V.row(currentHandle));
-                FixedPointsMatrix.row(FixedPointsMatrix.rows() - 1) = projection;
-
-                // Precomputation
-                igl::arap_precomputation(V, F, V.cols(), fixedPointsEigen, arap_data);
-
-                // Solve
-                igl::arap_solve(FixedPointsMatrix, arap_data, U);
-
-                updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
-                currentHandle = -1;
+                libiglImplArap(projection);
                 return true;
             }
             else
             {
-                for (int iteration = 0; iteration < MAX_ITER; iteration++)
-                {
-                    if (FIRST_LOOP)
-                    {
-                        U = V;
-
-                        Eigen::Vector3d projection = getWorldCoords(viewer, V.row(currentHandle));
-
-                        U.row(currentHandle) = projection;
-
-                        FIRST_LOOP = false;
-                    }
-                    // 1st:
-                    //  Calculate the vector R of rotation matrices
-                    //  U is the OUT matrix of the previous iteration
-                    std::vector<Eigen::Matrix3d> R = rotation_matrix(PD, U, neighbors);
-
-                    // Note: we need to make an initial guess for U at the first step! See paper to understand why?
-                    // 2nd:
-                    // U is the matrix of the new vertices after one ARAP iteration, called OUT or U above
-                    U = ARAP_iteration(fixedPoints, W, R, V, neighbors, L_initial);
-                    std::cout << "Done with arap: " << iteration << std::endl;
-                    // Note: Inside the ARAP_iteration function the matrix L_initial is copied to a matrix called L since it will be modified
-                    // (constraints addition or removal), but the L_initial will stay the same during the process
-                    // Repeat 1 and 2 until satisfaction(Energy difference < epsilon or number of iterations or both)
-                }
-                updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
-                currentHandle = -1;
-                FIRST_LOOP = true;
+                std::cout << currentHandle << " " << projection << std::endl;
+                ourImplArap(projection);
                 return true;
             }
+
+            updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
+            currentHandle = -1;
         }
         return false;
     };
@@ -348,6 +414,24 @@ int main()
             mode = ROTATION;
             std::cout << "Switching to rotation" << std::endl;
             return true;
+        case 'R':
+        case 'r':
+            igl::readOFF(mesh, V, F);
+            fixedPoints.clear();
+            viewer.data().clear();
+            viewer.data().clear_points();
+            viewer.data().set_face_based(true);
+            viewer.data().set_mesh(V, F);
+            return true;
+        case 's':
+        case 'S':
+            saveFixedPoints(fixedPoints, mesh);
+            return true;
+        case 'l':
+        case 'L':
+            loadFixedPoints(fixedPoints);
+            updateMesh(viewer, V, F, fixedPoints, pointColor, currentHandle, handleColor);
+            return true;
         }
         return true;
     };
@@ -355,5 +439,6 @@ int main()
     viewer.data().set_mesh(V, F);
     viewer.core().align_camera_center(V, F);
     viewer.data().set_face_based(true);
+    viewer.data().point_size = 10;
     viewer.launch();
 }

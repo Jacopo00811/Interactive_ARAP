@@ -1,0 +1,15 @@
+,MAX_ITER=1,,,MAX_ITER=5,,,MAX_ITER=10,,,MAX_ITER=20,,
+,Spokes,Spokes & Rims,Elements,Spokes,Spokes & Rims,Elements,Spokes,Spokes & Rims,Elements,Spokes,Spokes & Rims,Elements
+libigl,0.566001,0.673386,0.601897,0.722737,0.815819,0.730733,0.889689,0.985801,1.04132,1.17185,1.29037,1.48568
+our,3.98101,,,20.6919,,,46.1196,,,87.3443,,
+,,,,,,,,,,,,
+ratio,7.033574146,5.911928671,6.614105071,28.62991655,25.36334653,28.31663549,51.83788942,46.78388437,44.28955556,74.53539276,67.68934492,58.7907894
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,,,,,,,,,,,,
+,MAX_ITER=1,,,MAX_ITER=5,,,MAX_ITER=10,,,MAX_ITER=20,,
+,Spokes,Spokes & Rims,Elements,Spokes,Spokes & Rims,Elements,Spokes,Spokes & Rims,Elements,Spokes,Spokes & Rims,Elements
+libigl,0.661001,0.354747,0.331593,0.161594,0.118095,0.116927,0.0856356,0.0638588,0.0705204,0.06568844,0.0661571,0.0854703
+our,0.000202557,,,0.000238692,,,0.00031931,,,0.000454669,,
+,,,,,,,,,,,,
+ratio,,,,,,,,,,,,
