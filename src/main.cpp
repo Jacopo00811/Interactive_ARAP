@@ -379,17 +379,15 @@ int main()
             if (useIglArap)
             {
                 libiglImplArap(projection);
-                return true;
             }
             else
             {
-                std::cout << currentHandle << " " << projection << std::endl;
                 ourImplArap(projection);
-                return true;
             }
 
             updateMesh(viewer, U, F, fixedPoints, pointColor, currentHandle, handleColor);
             currentHandle = -1;
+            return true;
         }
         return false;
     };
